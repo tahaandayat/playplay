@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>2 Player  Win Message</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f4f8;
+      margin: 0; padding: 20px;
+      display: flex; flex-direction: column; align-items: center;
+      min-height: 100vh;
+    }
+    h1 {
+      color: #34495e;
+      margin-bottom: 10px;
+    }
+    .scores {
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+    .scores span {
+      margin-right: 20px;
+    }
+    .turn-indicator {
+      font-weight: bold;
+      margin-bottom: 10px;
+      font-size: 20px;
+    }
+    .timer {
+      font-size: 18px;
+      color: #c0392b;
+      margin-bottom: 20px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 80px);
+      gap: 10px;
+    }
+    .card {
+      width: 80px; height: 80px;
+      background: #2980b9;
+      border-radius: 8px;
+      display: flex; justify-content: center; align-items: center;
+      color: white;
+      font-size: 30px;
+      cursor: pointer;
+      user-select: none;
+      transition: background-color 0.3s;
+      position: relative;
+    }
+    .card.flipped, .card.matched {
+      background: #27ae60;
+      cursor: default;
+      color: white;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 25px;
+      background: #e67e22;
+      border: none;
+      border-radius: 6px;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    button:hover {
+      background: #d35400;
+    }
+    #resultMessage {
+      margin-top: 20px;
+      font-size: 24px;
+      font-weight: bold;
+      color: #27ae60;
+      min-height: 30px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>2 Player Memory Match with Timer & Sound</h1>
+
+  <div class="scores">
+    <span>Player 1 Score: <strong id="score1">0</strong></span>
+    <span>Player 2 Score: <strong id="score2">0</strong></span>
+  </div>
+  <div class="turn-indicator" id="turnIndicator">Player 1's Turn</div>
+  <div class="timer" id="timer">Time left: 20s</div>
+
+  <div class="grid" id="gameGrid"></div>
+
+  <button onclick="startGame()">Restart Game</button>
+ 
+  <div id="resultMessage"></div>
+
+  <!-- Audio Elements -->
+  <audio id="congratsSound" src="https://cdn.pixabay.com/download/audio/2022/03/24/audio_b8e5424f3c.mp3?filename=success-1-6297.mp3" preload="auto"></audio>
+  <audio id="timeUpSound" src="https://cdn.pixabay.com/download/audio/2022/03/22/audio_0bb0b51907.mp3?filename=error-126205.mp3" preload="auto"></audio>
+
+  <script>
+    const shapes = ['⬜', '🔺', '⚫', '⭐', '❤️', '🔷', '🍎', '🌟'];
+    let cards = [];
+    let flippedCards = [];
+    let lockBoard = false;
+    let playerTurn = 1;
+    let scores = { 1: 0, 2: 0 };
+
+    const TURN_TIME = 20; // seconds per turn
+    let timerInterval;
+    let timeLeft = TURN_TIME;
+
+    const gameGrid = document.getElementById('gameGrid');
+    const score1Display = document.getElementById('score1');
+    const score2Display = document.getElementById('score2');
+    const turnIndicator = document.getElementById('turnIndicator');
+    const timerDisplay = document.getElementById('timer');
+    const resultMessage = document.getElementById('resultMessage');
+
+    const congratsSound = document.getElementById('congratsSound');
+    const timeUpSound = document.getElementById('timeUpSound');
+
+    function shuffleArray(array) {
+      for (let i = array.length -1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
+    }
+
+    function startGame() {
+      cards = shuffleArray([...shapes, ...shapes]); // duplicate pairs
+      flippedCards = [];
+      lockBoard = false;
+      playerTurn = 1;
+      scores = { 1: 0, 2: 0 };
+      score1Display.textContent = '0';
+      score2Display.textContent = '0';
+      turnIndicator.textContent = "Player 1's Turn";
+      resultMessage.textContent = '';  // Clear previous message
+
+      timeLeft = TURN_TIME;
+      updateTimerDisplay();
+      clearInterval(timerInterval);
+      timerInterval = setInterval(countDown, 1000);
+
+      gameGrid.innerHTML = '';
+      cards.forEach((shape, index) => {
+        const card = document.createElement('div');
+        card.classList.add('card');
+        card.dataset.shape = shape;
+        card.dataset.index = index;
+        card.textContent = '';  // initially hidden
+        card.addEventListener('click', () => flipCard(card));
+        gameGrid.appendChild(card);
+      });
+    }
+
+    function flipCard(card) {
+      if(lockBoard) return;
+      if(card.classList.contains('flipped') || card.classList.contains('matched')) return;
+      if(flippedCards.length === 2) return;
+
+      card.classList.add('flipped');
+      card.textContent = card.dataset.shape;
+      flippedCards.push(card);
+
+      if(flippedCards.length === 2) {
+        lockBoard = true;
+        clearInterval(timerInterval); // pause timer while checking
+        checkForMatch();
+      }
+    }
+
+    function checkForMatch() {
+      const [card1, card2] = flippedCards;
+
+      if(card1.dataset.shape === card2.dataset.shape) {
+        // Match!
+        card1.classList.add('matched');
+        card2.classList.add('matched');
+        scores[playerTurn]++;
+        updateScores();
+        flippedCards = [];
+        lockBoard = false;
+
+        // Play congrats sound
+        congratsSound.play();
+
+        // Check game over
+        if(document.querySelectorAll('.matched').length === cards.length) {
+          clearInterval(timerInterval);
+          setTimeout(() => {
+            if(scores[1] > scores[2]) {
+              resultMessage.textContent = `🎉 Congratulations Player 1! You won!`;
+            } else if(scores[2] > scores[1]) {
+              resultMessage.textContent = `🎉 Congratulations Player 2! You won!`;
+            } else {
+              resultMessage.textContent = `🤝 It's a Tie!`;
+            }
+          }, 300);
+        } else {
+          // Player gets another turn, reset timer
+          timeLeft = TURN_TIME;
+          updateTimerDisplay();
+          timerInterval = setInterval(countDown, 1000);
+        }
+
+      } else {
+        // No match, flip back after delay and switch player
+        setTimeout(() => {
+          card1.classList.remove('flipped');
+          card1.textContent = '';
+          card2.classList.remove('flipped');
+          card2.textContent = '';
+
+          flippedCards = [];
+          lockBoard = false;
+          switchPlayer();
+          timeLeft = TURN_TIME;
+          updateTimerDisplay();
+          timerInterval = setInterval(countDown, 1000);
+        }, 1000);
+      }
+    }
+
+    function updateScores() {
+      score1Display.textContent = scores[1];
+      score2Display.textContent = scores[2];
+    }
+
+    function switchPlayer() {
+      playerTurn = playerTurn === 1 ? 2 : 1;
+      turnIndicator.textContent = `Player ${playerTurn}'s Turn`;
+    }
+
+    function countDown() {
+      timeLeft--;
+      updateTimerDisplay();
+
+      if(timeLeft <= 0) {
+        clearInterval(timerInterval);
+        // Play time up sound
+        timeUpSound.play();
+
+        resultMessage.textContent = `⏰ Time's up! Player ${playerTurn} missed their turn.`;
+        flippedCards.forEach(card => {
+          card.classList.remove('flipped');
+          card.textContent = '';
+        });
+        flippedCards = [];
+        lockBoard = false;
+        switchPlayer();
+        timeLeft = TURN_TIME;
+        updateTimerDisplay();
+        timerInterval = setInterval(countDown, 1000);
+
+        // Clear message after 3 seconds
+        setTimeout(() => {
+          resultMessage.textContent = '';
+        }, 3000);
+      }
+    }
+
+    function updateTimerDisplay() {
+      timerDisplay.textContent = `Time left: ${timeLeft}s`;
+    }
+
+    window.onload = startGame;
+  </script>
+
+</body>
+</html>
+
+	
